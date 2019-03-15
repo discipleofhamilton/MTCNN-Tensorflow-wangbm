@@ -24,19 +24,29 @@ import sys
 import argparse
 import time
 import os
+import shutil
 
 import tensorflow as tf
 import cv2
 import numpy as np
 
 from src.mtcnn import PNet, RNet, ONet
-from tools import detect_face, get_model_filenames
+from tools import detect_face, get_model_filenames, detect_face_24net, detect_face_12net
 
 def main(args):
 
     detect_totalTime = 0.0
     totalTime = 0.0
     frameCount = 0
+
+
+    if args.save_image:
+        output_directory = args.save_path
+        print(args.save_image)
+        if os.path.exists(output_directory):
+            shutil.rmtree(output_directory)
+        else:
+            os.mkdir(output_directory)
 
     # img = cv2.imread(args.image_path)
     # file_paths = get_model_filenames(args.model_dir)
@@ -112,25 +122,40 @@ def main(args):
                 for filename in os.listdir(args.image_path):
 
                     startOne = time.time()*1000
-                    img = cv2.imread(args.image_path + filename)
-                    # img = cv2.imread(args.image_path + str(x) + '.jpg')
-                    # resized_image = cv2.resize(img, (560, 315)) 
-                    # resized_image = cv2.resize(img, (460, 259))
-                    resized_image = cv2.resize(img, (320, 240))
+                    img = cv2.imread(os.path.join(args.image_path, filename))
+                    resized_image = cv2.resize(img, (320, 180))
                     # resized_image = cv2.resize(img, (640, 480))
 
                     start_time = time.time()*1000
-                    rectangles, points = detect_face(resized_image, args.minsize,
-                                                    pnet_fun, rnet_fun, onet_fun,
-                                                    args.threshold, args.factor)
+
+                    # P-Net + R-Net + O-Net
+                    if args.net == "ALL":
+                        rectangles, points = detect_face(resized_image, args.minsize,
+                                                        pnet_fun, rnet_fun, onet_fun,
+                                                        args.threshold, args.factor)
+
+                    # P-Net + R-Net without faces' landmarks
+                    elif args.net == "PR":
+                        rectangles = detect_face_24net(resized_image, args.minsize, 
+                                                        pnet_fun, rnet_fun,
+                                                        args.threshold, args.factor)
+
+                    # Only P-Net
+                    elif args.net == "P":
+                        rectangles = detect_face_12net(resized_image, args.minsize,
+                                                        pnet_fun, args.threshold, args.factor)
+
+                    else:
+                        print("ERROR: WRONG NET INPUT")
                     end_time = time.time()*1000
                     detect_totalTime = detect_totalTime + (end_time - start_time)
                     totalTime = totalTime + (end_time - startOne)
 
                     print(filename + " time : " + str(end_time - start_time) + "ms")
 
-                    print(type(rectangles))
-                    points = np.transpose(points)
+                    # print(type(rectangles))
+                    if args.net == "ALL":
+                        points = np.transpose(points) # The outputs of O-Net which are faces' landmarks
                     for rectangle in rectangles:
                         cv2.putText(resized_image, str(rectangle[4]),
                                     (int(rectangle[0]), int(rectangle[1])),
@@ -139,14 +164,17 @@ def main(args):
                         cv2.rectangle(resized_image, (int(rectangle[0]), int(rectangle[1])),
                                     (int(rectangle[2]), int(rectangle[3])),
                                     (255, 0, 0), 1)
-                    for point in points:
-                        for i in range(0, 10, 2):
-                            cv2.circle(resized_image, (int(point[i]), int(
-                                point[i + 1])), 2, (0, 255, 0))
-                    cv2.imshow("test", resized_image)
+
+                    if args.net == "ALL":
+                        for point in points:
+                            for i in range(0, 10, 2):
+                                cv2.circle(resized_image, (int(point[i]), int(
+                                    point[i + 1])), 2, (0, 255, 0))
+                    cv2.imshow("MTCNN-Tensorflow wangbm", resized_image)
                     frameCount = frameCount + 1
-                    # if args.save_image:
-                    #     cv2.imwrite(args.save_name, img)
+                    if args.save_image:
+                        outputFilePath = os.path.join(output_directory, filename)
+                        cv2.imwrite(outputFilePath, resized_image)
                     if cv2.waitKey(1) & 0xFF == ord('q'):
                         cv2.destroyAllWindows()
                         break
@@ -164,6 +192,8 @@ def parse_arguments(argv):
     parser.add_argument('--model_dir', type=str,
                         help='The directory of trained model',
                         default='./save_model/all_in_one/')
+    parser.add_argument('--net', type=str, choices=["P", "PR", "ALL"],
+                        help='The minimum size of face to detect.', default="ALL")
     parser.add_argument(
         '--threshold',
         type=float,
@@ -176,6 +206,8 @@ def parse_arguments(argv):
                         help='The scale stride of orginal image', default=0.7)
     parser.add_argument('--save_image', type=bool,
                         help='Whether to save the result image', default=False)
+    parser.add_argument('--save_path', type=str,
+                        help='Where to save the result image', default=False)                    
     parser.add_argument('--save_name', type=str,
                         help='If save_image is true, specify the output path.',
                         default='result.jpg')
