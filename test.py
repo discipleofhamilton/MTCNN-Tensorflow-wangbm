@@ -48,8 +48,6 @@ def main(args):
         else:
             os.mkdir(output_directory)
 
-    # img = cv2.imread(args.image_path)
-    # file_paths = get_model_filenames(args.model_dir)
     with tf.device('/cpu:0'):
         with tf.Graph().as_default():
             config = tf.ConfigProto(allow_soft_placement=True)
@@ -121,7 +119,6 @@ def main(args):
 
                 for filename in os.listdir(args.image_path):
 
-                    startOne = time.time()*1000
                     img = cv2.imread(os.path.join(args.image_path, filename))
                     resized_image = cv2.resize(img, (320, 180))
                     # resized_image = cv2.resize(img, (640, 480))
@@ -149,7 +146,6 @@ def main(args):
                         print("ERROR: WRONG NET INPUT")
                     end_time = time.time()*1000
                     detect_totalTime = detect_totalTime + (end_time - start_time)
-                    totalTime = totalTime + (end_time - startOne)
 
                     print(filename + " time : " + str(end_time - start_time) + "ms")
 
